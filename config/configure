@@ -1,0 +1,16 @@
+#!/bin/bash
+
+CONFIG=$PWD
+
+APPDIR=$(echo $CONFIG | sed 's/......$//') > 'config.txt'
+
+echo "PATH=$APPDIR" > 'config.txt'
+
+echo "" >> 'config.txt'
+
+PKGS=$(cat requirements.txt | tr '\n' ','| sed 's/.$//')
+
+echo "PKGS=[$PKGS]" >> 'config.txt'
+
+Rscript write_db.R
+
