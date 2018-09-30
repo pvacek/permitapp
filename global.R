@@ -13,9 +13,55 @@ scraper_sidebar<-function(){
   ),
   conditionalPanel(
     condition = "output.switch == 'TRUE'",
-    actionButton("Clear", "Clear Results")
+    actionButton("Clear", "Clear Results"),
+    actionButton("Post","Send data to Routing API")
   )
   ,width=3)
+}
+
+scraper_input<-function(statenames){
+  tabPanel("Input", fluidRow(renderText("This tab is where you input your permits."),
+           rHandsontableOutput("hot")),
+           fluidRow(renderText("If you want to put a starting point, you may fill in the info below"),
+           selectInput("startType","Select type of starting point",
+                       choices=c("address","highway","stateline","intersection")),
+           textInput("startWaypoint","Enter the waypoint"),
+           selectInput("startState","Select the starting state",choices=statenames),
+           checkboxInput("useStart","Check this box to include the custom starting point.")))
+}
+
+scraper_input2<-function(statenames,files){
+  tabPanel("Input",fluidRow(renderText("If you want to put a starting point, you may fill in the info below"),
+                    orderInput(inputId = 'foo', label = 'Order permits here (left to right, top to bottom)', items = files),
+                    p("The scraper tool reads this table from top to bottom."),
+                    tableOutput('order')),
+                    fluidRow(selectInput("startType","Select type of starting point",
+                                choices=c("address","highway","stateline","intersection")),
+                    textInput("startWaypoint","Enter the waypoint"),
+                    selectInput("startState","Select the starting state",choices=statenames),
+                    checkboxInput("useStart","Check this box to include the custom starting point."))
+           )
+}
+
+scraper_output<-function(switch){
+  if(switch==FALSE){
+    return(tabPanel("",p("")))
+  }
+  else{
+    return(tabPanel("Output", renderText("This tab is where you see your results."),
+                    rHandsontableOutput("pdfdf"),
+                    downloadButton('downloadData', 'Download Data File'),
+                    conditionalPanel(
+                      condition = "output.mapstatus == 'TRUE'",
+                      downloadButton('downloadGPX', 'Download GPX File')
+                    )
+                    )
+    )
+  }
+}
+
+scraper_map<-function(){
+  tabPanel("Map",textOutput("maperr"),leafletOutput("mymap"))
 }
 
 #QA
@@ -70,7 +116,37 @@ update_comment<-function(name,comment="No comments yet!"){
 
 #LEAFLET
 
-route<-fromJSON("./data/misc/example-results-309.json")$coordinates
-n<-nrow(route)
-lonlat<-apply(route,2,median)
-routeline<-Line(route)
+null_map<-function(){
+  m <- leaflet() %>% setView(lng = -100, lat = 41, zoom = 3) %>% addTiles()
+  m
+}
+
+error_message<-function(content){
+  return(paste0("ERROR in ",content$err_file," on line ",content$err_line,
+                ". MESSAGE: ",content$message))
+}
+
+POST2MAP<-function(content){
+  coords<-content$coordinates
+  wps<-content$waypoints
+  n<-length(coords)
+  route<-matrix(unlist(coords),n,2,byrow=TRUE)
+  routeline<-Line(route)
+  lonlat<-apply(route,2,median)
+  m <- leaflet(data=routeline) %>% setView(lng = lonlat[1], lat = lonlat[2], zoom = 3)
+  m <- m %>% addTiles() %>% addPolylines()
+  for(i in 1:length(wps)){
+    colchoice<-ifelse(i==1,"green",ifelse(i==length(wps),"red","yellow"))
+    waypoint<-unlist(wps[[i]])
+    m<- m %>% addCircleMarkers(lng=waypoint[1],lat=waypoint[2],
+                               popup=paste0("Waypoint #",i),color=colchoice)
+  }
+  return(m)
+}
+
+POST2GPX<-function(coords){
+  coords_df<-data.frame(lon=sapply(coords,function(x)x[[1]]),lat=sapply(coords,function(x)x[[2]]))
+  write.csv(coords_df,file="coords.csv",row.names=FALSE)
+  #system command: gpsbabel
+  system(paste0("gpsbabel -i csv -f coords.csv -o gpx -F way.gpx"),intern=TRUE)
+}
