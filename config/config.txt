@@ -1,0 +1,3 @@
+PATH=/srv/shiny-server/permitapp/
+
+PKGS=[RSQLite,DBI,shiny,shinydashboard,pdftools,rdrop2,htmltools,Xmisc,rhandsontable,leaflet,sp,jsonlite,ggplot2,httr,shinyjqui]
