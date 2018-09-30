@@ -8,6 +8,13 @@ scrape_lvl34<-function(raw,state,s=3){
   start<-grep(signal,split)
   if(length(start)>0){
     data<-paste0(split[start[1]:(start[1]+s)],collapse=" ")
+    if(state=="LA"){
+      route<-str_split(str_extract(data,"[A-Z0-9]+-[A-Z0-9-]*"),"-")[[1]]
+      route<-gsub("I","I-",route)
+      route[grepl("[A-Z]",route)==FALSE]<-paste0("LA-",route[grepl("[A-Z]",route)==FALSE])
+      data<-data.frame(Route=route,Or="",Miles=NA,To="",stringsAsFactors=FALSE)
+      return(data)
+    }
     data1<-str_extract_all(data,"[A-Z]{1,3}[-]{0,1}[0-9]{1,4}[ A-Z]{0,3}")[[1]]
     data2<-str_extract_all(data,"[0-9]{1,3}[NSWE]{1}[B]{0,1}")[[1]]
     data3<-str_extract_all(data,"[0-9]{1,3}[-, ]{1}")[[1]]
@@ -30,6 +37,7 @@ scrape_lvl34<-function(raw,state,s=3){
     }
     else{
       data<-NULL
+      return(data)
     }
   }
   else{

@@ -1,11 +1,11 @@
 #HANDLER: Level 1 States.
 #INCLUDES: CO,FL,GA,IL,KS,MA,NM,ND,OK,PA,TX,WA
 
-handle_topbot<-function(line){
-  line<-str_split(line,"[ ]{2,}")[[1]]
-  line<-line[grep("[A-z]",line)]
-  return(data.frame(Route="",Or=NA,Miles=0,To=line,stringsAsFactors = FALSE))
-}
+#handle_topbot<-function(line){
+#  line<-str_split(line,"[ ]{2,}")[[1]]
+#  line<-line[grep("[A-z]",line)]
+#  return(data.frame(Route="",Or=NA,Miles=0,To=line,stringsAsFactors = FALSE))
+#}
 
 scrape_lvl1<-function(raw,state=""){
   split<-str_split(raw,"\n")[[1]]
@@ -13,16 +13,19 @@ scrape_lvl1<-function(raw,state=""){
     has_mr<-grep("[0-9.]+?[ ]{2,}[A-Z]{1,3}[- ]{0,1}[0-9]{1,4}",split)
     has_et<-grep("[0-9:]+$",split)
     mret<-intersect(has_mr,has_et)
-    data<-split[c(mret[1]-1,mret,mret[length(mret)]+1)]
-    top<-bot<-NULL
-    if(grep("Origin",data[1])){
-      top<-handle_topbot(data[1])
+    data<-split[mret]
+    if(is.na(data)||length(data)==0){
+      return(NULL)
     }
-    data<-data[-1]
-    if(!is.na(data[length(data)])){#Remove footer if it doesn't exist
-      bot<-handle_topbot(data[length(data)])
-    }
-    data<-data[-length(data)]
+#    top<-bot<-NULL
+#    if(grep("Origin",data[1])){
+#      top<-handle_topbot(data[1])
+#    }
+#    data<-data[-1]
+#    if(!is.na(data[length(data)])){#Remove footer if it doesn't exist
+#      bot<-handle_topbot(data[length(data)])
+#    }
+#    data<-data[-length(data)]
     data<-field_pop(gsub("[ ]{1,}[0-9:]+$","",data))
     miles<-as.numeric(str_extract(data,"[0-9.]+$"))
     data<-gsub("[ ]+[^ ]+$","",data)[!is.na(miles)]
@@ -31,7 +34,7 @@ scrape_lvl1<-function(raw,state=""){
     or<-str_extract(data,"(W(Est|B)*|S(outh|B|WB|EB)*|N(orth|B|WB|EB)*|E(ast|B)*|w|s|n|e)")
     data<-gsub("^.*?[ ]{2,}","",data)
     data<-data.frame(Route=route,Or=or,Miles=c(miles[1],diff(miles)),To=data,stringsAsFactors = FALSE)
-    data<-rbind(top,data,bot)
+    #data<-rbind(top,data,bot)
   }
   else if(state=="OK"){ #OK
     has_mi<-grep("^[0-9.].*?[A-Z]{1,3}[- ]{1}",split)

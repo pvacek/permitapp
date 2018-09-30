@@ -13,7 +13,7 @@ config<-function(){
     }
     else{
       print(paste0(package," not found. Installing ",package))
-      install.packages(package)
+      install.packages(package,repos = "http://cran.us.r-project.org")
       require(package,character.only=TRUE)
     }
     print(paste0(package," loaded."))
