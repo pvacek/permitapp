@@ -1,6 +1,6 @@
 source("handler.R")
+statenames<-c("None",sql_to_df("SELECT * FROM STATES")$STATENAME)
 source("global.R")
-
 
 state_choice<-c(toupper(state.name[-c(2,11)]),"UNK")
 
@@ -10,8 +10,7 @@ ui <- dashboardPage(
     sidebarMenu(
     menuItem("Permit Scraping Tool", tabName = "scraper", icon = icon("file")),
     menuItem("Permit QA Tool", tabName = "qa", icon = icon("edit")),
-    menuItem("Permit DB Tool", tabName = "db", icon = icon("database")),
-    menuItem("Leaflet Demo", tabName = "leaf", icon=icon("globe"))
+    menuItem("Permit DB Tool", tabName = "db", icon = icon("database"))
     )
   ),
   dashboardBody(
@@ -28,10 +27,7 @@ ui <- dashboardPage(
                                              fluidRow(box(selectInput(inputId="TBL",label="Choose Table",choices=dbListTables(conn)),
                                              actionButton(inputId="QUERY",label="Send to Query"),width=4),
                                              box(dataTableOutput("DB"),width=8))
-              ),
-      tabItem(tabName = "leaf",box(p("LEAFLET DEMO"),
-                                   leafletOutput("mymap"))
-      )
+              )
     )
   )
 )
@@ -42,14 +38,15 @@ server <- function(input, output,session) {
   vals$data_present<-FALSE
   vals$files_present<-FALSE
   vals$stateabb<-NULL
+  vals$mapstatus<-FALSE
+  vals$filedata<-NULL
   
   data_check<-reactive({
-    if(is.null(input$hot)){
+    if(is.null(vals$filedata)){
       val<-FALSE
     }
     else{
-      DF<-hot_to_r(input$hot)
-      val<-ifelse(nrow(DF)>0,TRUE,FALSE)
+      val<-TRUE
     }
     return(val)
   })
@@ -71,27 +68,17 @@ server <- function(input, output,session) {
     content = function(con) {
       data<-hot_to_r(input$pdfdf)
       data$Order<-NULL
-      data$Keep<-NULL
       write.csv(data, con,row.names=FALSE)
     }
   )
   
-  output$downloadJSON <- downloadHandler(
+  output$downloadGPX <- downloadHandler(
     filename = function() {
-      paste('jsondata-', Sys.Date(), '.json', sep='')
+      paste('gpx-', Sys.Date(), '.gpx', sep='')
     },
-    content = function(con) {
-      data<-hot_to_r(input$pdfdf)
-      state_ord<-as.character(unique(data$state))
-      
-      stateJSON<-function(state){
-        stateabb<-state.abb[match(state,toupper(state.name))]
-        list(state=stateabb,waypoints=subset(data[,2:3],data$state==state))
-      }
-      
-      jfile<-toJSON(lapply(state_ord,stateJSON),auto_unbox=TRUE,pretty=TRUE)
-      
-      write(jfile, con)
+    
+    content = function(file) {
+      file.copy("way.gpx", file)
     }
   )
   
@@ -100,67 +87,88 @@ server <- function(input, output,session) {
     vals$data_present<-data_check()
     vals$file_present<-file_check()
     
-    readfile<-observeEvent(input$upload,{
+    observeEvent(input$upload,{
       inFiles<-input$files
-      n<-min(c(nrow(inFiles),1))
-      if(is.null(input$hot)){
-        DF<-data.frame(Order=1:n,Keep=rep(TRUE,n),name=inFiles$name,datapath=inFiles$datapath,state=rep("",n),stringsAsFactors=FALSE)
+      if(is.null(input$foo_order)){
+        vals$filedata<-data.frame(name=inFiles$name,datapath=inFiles$datapath)
+      }else{
+        df1<-vals$filedata
+        df2<-data.frame(name=inFiles$name,datapath=inFiles$datapath)
+        DF<-rbind(df1,df2)
+        vals$filedata<-DF[duplicated(DF)==FALSE,]
       }
-      else{
-        DF1<-hot_to_r(input$hot)
-        DF2<-data.frame(Order=1:n,Keep=rep(TRUE,n),name=inFiles$name,datapath=inFiles$datapath,state=rep("",n),stringsAsFactors=FALSE)
-        DF<-rbind(DF1,DF2)
-      }
-      DF$Order<-1:nrow(DF)
-      DF_hot<-rhandsontable(DF,selectCallback = TRUE,readOnly=FALSE)
-      output$hot<-renderRHandsontable(DF_hot)
-    },ignoreInit=TRUE)
+    },ignoreInit=TRUE,once=TRUE)
     
-    if(vals$data_present==TRUE){
-      filter1<-observeEvent(input$filter1,{
-        DF<-hot_to_r(input$hot)
-        DF<-DF[DF$Keep==TRUE,]
-        DF_hot<-rhandsontable(DF,selectCallback = TRUE,readOnly=FALSE)
-        output$hot<-renderRHandsontable(DF_hot)
-      },ignoreInit=TRUE)
-      
-      order1<-observeEvent(input$order1,{
-        DF<-hot_to_r(input$hot)
-        DF<-DF[order(DF$Order),]
-        DF_hot<-rhandsontable(DF,selectCallback = TRUE,readOnly=FALSE)
-        output$hot<-renderRHandsontable(DF_hot)
-      },ignoreInit=TRUE)
-    }
+    output$order <- renderTable({vals$filedata[as.numeric(input$foo_order),]})
     
     PDFtoCSV<-observeEvent(input$execute,{
-      DF<-hot_to_r(input$hot)
+      DF<-vals$filedata[as.numeric(input$foo_order),]
       progress<-Progress$new(session,min=1,max=nrow(df))
       on.exit(progress$close())
       result_df<-multihandler(DF,progress)
       vals$switch<-TRUE
       result_df[] <- lapply(result_df, as.character)
+      if(input$useStart==TRUE){
+        type<-input$startType
+        wpt<-input$startWaypoint
+        state<-ifelse(input$startState=="None",result_df$state[1],input$startState)
+        header<-data.frame(state=state,waypoint=wpt,type=type,
+                           orientation="",miles=0,to=paste0("Start at ",wpt),
+                           stringsAsFactors = FALSE)
+        result_df<-rbind(header,result_df)
+      }
+      result_df$state<-factor(result_df$state,levels=statenames[-1])
       result_df$Order<-1:nrow(result_df)
-      result_df$Keep<-TRUE
-      RDF_hot<-rhandsontable(result_df,selectCallback = TRUE,readOnly=FALSE)
+      result_df$type<-factor(result_df$type,levels=c("address","highway","stateline","intersection"))
+      RDF_hot<-rhandsontable(result_df,selectCallback = TRUE,readOnly=FALSE)  %>%
+        hot_cols(columnSorting = TRUE) %>% 
+        hot_col(col = "type", type = "dropdown", source = c("address","highway","stateline","intersection"))
       output$pdfdf<-renderRHandsontable(RDF_hot)
     },ignoreInit=TRUE)
     
-    filter2<-observeEvent(input$filter2,{
-      DF<-hot_to_r(input$pdfdf)
-      DF<-DF[DF$Keep==TRUE,]
-      RDF_hot<-rhandsontable(DF,selectCallback = TRUE,readOnly=FALSE)
-      output$pdfdf<-renderRHandsontable(RDF_hot)
-    },ignoreInit=TRUE)
-    
-    order2<-observeEvent(input$order2,{
-      DF<-hot_to_r(input$pdfdf)
-      DF<-DF[order(DF$Order),]
-      RDF_hot<-rhandsontable(DF,selectCallback = TRUE,readOnly=FALSE)
-      output$pdfdf<-renderRHandsontable(RDF_hot)
+    DFtoJSON<-observeEvent(input$Post,{
+      data<-hot_to_r(input$pdfdf)
+      state_ord<-as.character(unique(data$state))
+      
+      stateJSON<-function(state){
+        stateabb<-state.abb[match(state,toupper(state.name))]
+        list(state=stateabb,waypoints=subset(data[,2:3],data$state==state))
+      }
+      write(toJSON(lapply(state_ord,stateJSON),auto_unbox=TRUE,pretty=TRUE), "test.json")
+      progress <- shiny::Progress$new()
+      on.exit(progress$close())
+      progress$set(message = "Sending route to API...", value = 0)
+      posting<-tryCatch(POST(url="http://159.65.98.104:6000",body=fromJSON("test.json"),encode="json"),
+                        error=function(e){
+                          print(e)
+                          return(NA)
+                          })
+      #posting<-POST(url="http://159.65.98.104:6000",body=fromJSON("test.json"),encode="json")
+      progress$set(message = "Received post from API.", value = 1)
+      if(length(posting)==1){
+        m<-null_map()
+        maperror<-"ERROR: Connection to API failed."
+      }else if(length(posting)>1){
+        saveRDS(posting,"posting.rds")
+        cont<-content(posting)
+        maperror<-ifelse(cont$status=="ERROR",error_message(cont),"")
+        if(length(cont$coordinates)>0){
+          POST2GPX(cont$coordinates)
+          m<-POST2MAP(cont)
+        }
+        else{
+          m<-null_map()
+        }
+      }
+      vals$mapstatus<-TRUE
+      output$maperr<-renderText(maperror)
+      output$mymap<-renderLeaflet(m)
     },ignoreInit=TRUE)
     
     output$switch<-renderText(vals$switch)
     outputOptions(output, "switch", suspendWhenHidden = FALSE)
+    output$mapstatus<-renderText(vals$mapstatus)
+    outputOptions(output, "mapstatus", suspendWhenHidden = FALSE)
     output$file_present<-renderText(vals$file_present)
     outputOptions(output, "file_present", suspendWhenHidden = FALSE)
     output$data_present<-renderText(vals$data_present)
@@ -168,31 +176,16 @@ server <- function(input, output,session) {
     
     clear<-observeEvent(input$Clear,{
       vals$switch<-FALSE
-      DF<-rhandsontable(hot_to_r(input$hot)[NULL,],selectCallback=TRUE,readOnly=FALSE)
-      output$hot<-renderRHandsontable(DF)
+      vals$mapstatus<-FALSE
+      vals$filedata<-NULL
       RDF<-rhandsontable(hot_to_r(input$pdfdf)[NULL,],selectCallback=TRUE,readOnly=FALSE)
       output$pdfdf<-renderRHandsontable(RDF)
     },ignoreInit=TRUE)
-    if(vals$switch==TRUE){
-      tabBox(title = "Permit App",id= "ttabs", width = 12, height = "800px",
-             tabPanel("Input", renderText("This tab is where you input your permits."),
-                      rHandsontableOutput("hot"),
-                      actionButton("filter1", label = "Filter Rows", value = FALSE),
-                      actionButton("order1", label = "Order Rows", value = FALSE)),
-             tabPanel("Output", renderText("This tab is where you see your results."),
-                      rHandsontableOutput("pdfdf"),
-                      actionButton("filter2", label = "Filter Rows", value = FALSE),
-                      actionButton("order2", label = "Order Rows", value = FALSE),
-                      downloadButton('downloadData', 'Download Data File'),
-                      downloadButton('downloadJSON','Download JSON File')))
-    }
-    else{
-      tabBox(title = "Permit App",id= "ttabs", width = 12, height = "800px",
-             tabPanel("Input", renderText("This tab is where you input your permits."),
-                      rHandsontableOutput("hot"),
-                      actionButton("filter1", label = "Filter Rows", value = FALSE),
-                      actionButton("order1", label = "Order Rows", value = FALSE)))
-    }
+    tabBox(title = "Permit App",id= "ttabs", width = 12, height = "800px",
+           scraper_input2(statenames,vals$filedata$name),
+           scraper_output(vals$switch),
+           scraper_map()
+    )
   })
   #QA
   STATERES<-eventReactive(input$select,{
@@ -217,14 +210,6 @@ server <- function(input, output,session) {
     return(tbl)
   })
   output$DB<-renderDataTable(make_tbl())
-  #LEAFLET
-  output$mymap <- renderLeaflet({
-    m <- leaflet(data=routeline) %>% setView(lng = lonlat[1], lat = lonlat[2], zoom = 3)
-    m <- m %>% addTiles() %>% addPolylines()
-    m <- m  %>% addCircleMarkers(lng=route[1,1],lat=route[1,2],popup="START",color="green")
-    m <- m %>% addCircleMarkers(lng=route[n,1],lat=route[n,2],popup="END",color="red")
-    m
-  })
 }
 
 shinyApp(ui, server)
