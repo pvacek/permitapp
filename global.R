@@ -148,5 +148,8 @@ POST2GPX<-function(coords){
   coords_df<-data.frame(lon=sapply(coords,function(x)x[[1]]),lat=sapply(coords,function(x)x[[2]]))
   write.csv(coords_df,file="coords.csv",row.names=FALSE)
   #system command: gpsbabel
-  system(paste0("gpsbabel -i csv -f coords.csv -o gpx -F way.gpx"),intern=TRUE)
+  system(paste0("gpsbabel -r -i unicsv -f coords.csv -o gpx -F way.gpx"),intern=TRUE)
+  way<-readLines("way.gpx")
+  way2<-way[-grep("name",way)]
+  writeLines(way2,"way.gpx")
 }
