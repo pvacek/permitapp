@@ -19,18 +19,7 @@ scraper_sidebar<-function(){
   ,width=3)
 }
 
-scraper_input<-function(statenames){
-  tabPanel("Input", fluidRow(renderText("This tab is where you input your permits."),
-           rHandsontableOutput("hot")),
-           fluidRow(renderText("If you want to put a starting point, you may fill in the info below"),
-           selectInput("startType","Select type of starting point",
-                       choices=c("address","highway","stateline","intersection")),
-           textInput("startWaypoint","Enter the waypoint"),
-           selectInput("startState","Select the starting state",choices=statenames),
-           checkboxInput("useStart","Check this box to include the custom starting point.")))
-}
-
-scraper_input2<-function(statenames,files){
+scraper_input<-function(statenames,files){
   tabPanel("Input",fluidRow(renderText("If you want to put a starting point, you may fill in the info below"),
                     orderInput(inputId = 'foo', label = 'Order permits here (left to right, top to bottom)', items = files),
                     p("The scraper tool reads this table from top to bottom."),
@@ -50,6 +39,7 @@ scraper_output<-function(switch){
   else{
     return(tabPanel("Output", renderText("This tab is where you see your results."),
                     rHandsontableOutput("pdfdf"),
+                    actionButton('sort','Sort Data'),
                     downloadButton('downloadData', 'Download Data File'),
                     conditionalPanel(
                       condition = "output.mapstatus == 'TRUE'",

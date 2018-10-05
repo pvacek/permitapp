@@ -126,6 +126,16 @@ server <- function(input, output,session) {
       output$pdfdf<-renderRHandsontable(RDF_hot)
     },ignoreInit=TRUE)
     
+    observeEvent(input$sort,{
+      data<-hot_to_r(input$pdfdf)
+      data<-data[order(data$Order),]
+      data$Order<-1:nrow(data)
+      RDF_hot<-rhandsontable(data,selectCallback = TRUE,readOnly=FALSE)  %>%
+        hot_cols(columnSorting = TRUE) %>% 
+        hot_col(col = "type", type = "dropdown", source = c("address","highway","stateline","intersection"))
+      output$pdfdf<-renderRHandsontable(RDF_hot)
+    },ignoreInit=TRUE)
+    
     DFtoJSON<-observeEvent(input$Post,{
       data<-hot_to_r(input$pdfdf)
       state_ord<-as.character(unique(data$state))
@@ -143,7 +153,6 @@ server <- function(input, output,session) {
                           print(e)
                           return(NA)
                           })
-      #posting<-POST(url="http://159.65.98.104:6000",body=fromJSON("test.json"),encode="json")
       progress$set(message = "Received post from API.", value = 1)
       if(length(posting)==1){
         m<-null_map()
@@ -182,7 +191,7 @@ server <- function(input, output,session) {
       output$pdfdf<-renderRHandsontable(RDF)
     },ignoreInit=TRUE)
     tabBox(title = "Permit App",id= "ttabs", width = 12, height = "800px",
-           scraper_input2(statenames,vals$filedata$name),
+           scraper_input(statenames,vals$filedata$name),
            scraper_output(vals$switch),
            scraper_map()
     )
