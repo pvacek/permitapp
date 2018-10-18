@@ -89,6 +89,16 @@ server <- function(input, output,session) {
     
     observeEvent(input$upload,{
       inFiles<-input$files
+      fn<-inFiles$name
+      #Render PDF's in separate window
+      sapply(1:nrow(inFiles),function(i)file.copy(inFiles$datapath[i],
+                                                 paste0("./www/",fn[i])))
+      output$pdfview <- renderUI({
+        choice<-ifelse(!is.null(input$pdfchoice),input$pdfchoice,fn[1])
+        tagList(selectInput("pdfchoice","Choose PDF",choices=fn,selected=choice),
+                tags$iframe(style="height:600px; width:100%", src=choice))
+      })
+      #Attach data to viewing table
       if(is.null(input$foo_order)){
         vals$filedata<-data.frame(name=inFiles$name,datapath=inFiles$datapath)
       }else{
@@ -193,6 +203,7 @@ server <- function(input, output,session) {
     tabBox(title = "Permit App",id= "ttabs", width = 12, height = "800px",
            scraper_input(statenames,vals$filedata$name),
            scraper_output(vals$switch),
+           scraper_pdf(),
            scraper_map()
     )
   })

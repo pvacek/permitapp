@@ -50,6 +50,10 @@ scraper_output<-function(switch){
   }
 }
 
+scraper_pdf<-function(){
+  tabPanel("PdfView",uiOutput("pdfview"))
+}
+
 scraper_map<-function(){
   tabPanel("Map",textOutput("maperr"),leafletOutput("mymap"))
 }
