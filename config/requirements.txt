@@ -11,3 +11,5 @@ leaflet
 sp
 jsonlite
 ggplot2
+httr
+shinyjqui
